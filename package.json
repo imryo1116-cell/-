@@ -1,0 +1,11 @@
+{
+  "name": "mobile-shop-daily-input-gas",
+  "private": true,
+  "version": "1.0.0",
+  "description": "携帯ショップ日次実績入力ツール（Google スプレッドシート + GAS）",
+  "scripts": {
+    "test": "node test/run.js",
+    "build": "node build.js",
+    "push": "node build.js && clasp push"
+  }
+}
