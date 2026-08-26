@@ -480,6 +480,89 @@ var Logic = (function () {
   }
 
   // ============================================================
+  // 「日次ログ」シートの列定義（列の並び順の唯一の正）
+  // 項目を追加したいときは、該当する定義配列（CARRIERS/MIGRATIONS/SOURCES/
+  // SUB_DEF/YAGOU_PRODUCTS）に追加すれば、この関数が自動的に列を追加する。
+  // ============================================================
+  var YAGOU_GROUP_LABEL = { DCM: 'DCM', AUUQ: 'auUQ', SBYM: 'SBYM' };
+  var YAGOU_GROUP_ORDER = ['DCM', 'AUUQ', 'SBYM'];
+
+  function getLogHeaderDefs() {
+    var defs = [];
+    defs.push({ key: 'date', label: '日付', major: '日付', type: 'date' });
+    defs.push({ key: 'weekday', label: '曜日', major: '基本情報', type: 'text' });
+    defs.push({ key: 'event', label: 'イベント', major: '基本情報', type: 'text' });
+    defs.push({ key: 'memo', label: 'メモ', major: '基本情報', type: 'text' });
+
+    CARRIERS.forEach(function (c) {
+      defs.push({ key: c + '_kihen', label: c + '_機変', major: c, type: 'int' });
+      defs.push({ key: c + '_junshinki', label: c + '_純新規', major: c, type: 'int' });
+      defs.push({ key: c + '_mnp', label: c + '_MNP', major: c, type: 'int' });
+      defs.push({ key: c + '_uchiSim', label: c + '_内SIMのみ', major: c, type: 'int' });
+    });
+
+    MIGRATIONS.forEach(function (m) {
+      defs.push({ key: m.key, label: m.label, major: '番号移行', type: 'int' });
+    });
+
+    SOURCES.forEach(function (s) {
+      defs.push({ key: s.key, label: s.label, major: '移転元', type: 'int' });
+    });
+
+    SUB_DEF.forEach(function (d) {
+      if (d.type !== 'input') return; // 計(sum)列はシートに持たず、日次サマリー側で数式計算する
+      defs.push({ key: d.key, label: d.label, major: GROUP_LABEL[d.group] + d.category, type: 'int' });
+    });
+
+    YAGOU_PRODUCTS.forEach(function (p) {
+      YAGOU_GROUP_ORDER.forEach(function (g) {
+        defs.push({ key: yagouKey(p.key, g), label: '屋号_' + p.label + '_' + YAGOU_GROUP_LABEL[g], major: '屋号:' + p.label, type: 'int' });
+      });
+    });
+
+    defs.push({ key: 'updatedAt', label: '更新日時', major: '更新日時', type: 'text' });
+    return defs;
+  }
+
+  // headerDefs から2行分のヘッダー配列を組み立てる（row1=大分類・結合用、row2=見出し名）
+  function buildHeaderRows(headerDefs) {
+    var row2 = headerDefs.map(function (d) { return d.label; });
+    var row1 = headerDefs.map(function () { return ''; });
+    var i = 0;
+    while (i < headerDefs.length) {
+      var major = headerDefs[i].major;
+      row1[i] = major || '';
+      i++;
+      while (i < headerDefs.length && headerDefs[i].major === major) i++;
+    }
+    return { row1: row1, row2: row2 };
+  }
+
+  // raw（フォーム入力オブジェクト）→ シート1行分の配列
+  function rowFromRaw(raw, headerDefs) {
+    raw = raw || {};
+    return headerDefs.map(function (d) {
+      if (d.key === 'weekday') {
+        var ds = toDateStr(raw.date);
+        return ds ? getWeekdayJa(ds) : '';
+      }
+      if (d.type === 'date') return toDateStr(raw[d.key]);
+      if (d.type === 'int') return clampNonNegInt(raw[d.key]);
+      return raw[d.key] === undefined || raw[d.key] === null ? '' : String(raw[d.key]);
+    });
+  }
+
+  // シート1行分の配列 → raw（buildDayModel にそのまま渡せるオブジェクト）
+  function rawFromRow(rowValues, headerDefs) {
+    var raw = {};
+    headerDefs.forEach(function (d, i) {
+      var v = rowValues[i];
+      raw[d.key] = d.type === 'date' ? toDateStr(v) : v;
+    });
+    return raw;
+  }
+
+  // ============================================================
   // シート列マップ（不具合(4)対策：見出し名から列位置を解決する）
   // ============================================================
   // headerRow: 2行目の見出し配列（1始まりではなく0始まりの配列。A列=index0）
@@ -697,6 +780,13 @@ var Logic = (function () {
     YAGOU_PRODUCTS: YAGOU_PRODUCTS,
     yagouKey: yagouKey,
     yagouLabel: yagouLabel,
+    YAGOU_GROUP_ORDER: YAGOU_GROUP_ORDER,
+    YAGOU_GROUP_LABEL: YAGOU_GROUP_LABEL,
+
+    getLogHeaderDefs: getLogHeaderDefs,
+    buildHeaderRows: buildHeaderRows,
+    rowFromRaw: rowFromRaw,
+    rawFromRow: rawFromRow,
 
     clampNonNegInt: clampNonNegInt,
     toDateStr: toDateStr,

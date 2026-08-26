@@ -236,6 +236,32 @@ test('大分類の結合範囲が固定列をまたぐ場合は例外を投げ�
   });
 });
 
+test('実際の日次ログ列定義(getLogHeaderDefs)でも結合範囲が固定列をまたがない', function () {
+  var defs = Logic.getLogHeaderDefs();
+  var ranges = Logic.buildMergeRanges(defs);
+  assert.doesNotThrow(function () {
+    Logic.validateMergeRanges(ranges, 1); // A列(日付)のみ固定
+  });
+  assert.strictEqual(defs[0].key, 'date');
+  assert.strictEqual(defs[0].major, '日付'); // 日付は単独の大分類（他の項目と結合されない）
+});
+
+test('rowFromRaw / rawFromRow: 往復変換でデータが保持される', function () {
+  var defs = Logic.getLogHeaderDefs();
+  var raw = { date: '2026-08-10', event: 'auイベント', memo: 'テスト', DCM_kihen: 3, dcm_hikari1g: 2 };
+  var row = Logic.rowFromRaw(raw, defs);
+  var colMap = Logic.getColMap(row.length ? defs.map(function (d) { return d.label; }) : []);
+  assert.strictEqual(row[colMap['日付'] - 1], '2026-08-10');
+  assert.strictEqual(row[colMap['DCM_機変'] - 1], 3);
+  assert.strictEqual(row[colMap['曜日'] - 1], '月');
+
+  var raw2 = Logic.rawFromRow(row, defs);
+  var model = Logic.buildDayModel(raw2);
+  assert.strictEqual(model.date, '2026-08-10');
+  assert.strictEqual(model.carriers.DCM.kihen, 3);
+  assert.strictEqual(model.sub.dcm_hikari1g, 2);
+});
+
 // ============================================================
 // CSV / HTMLエスケープ
 // ============================================================
