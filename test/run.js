@@ -295,11 +295,37 @@ test('入力値のクランプ：空欄は0、マイナスは0、小数は切り
   assert.strictEqual(model.carriers.DCM.mnp, 3);
 });
 
+test('buildAggBlockRows: 0件の項目は行として出力されない', function () {
+  var model = Logic.buildDayModel({ date: '2026-08-10', DCM_kihen: 1, dcm_hikari1g: 2 });
+  var rows = Logic.buildAggBlockRows(model);
+  var labels = rows.map(function (r) { return r.label; });
+  assert.ok(labels.indexOf('MB総販') !== -1);
+  assert.ok(labels.indexOf('番号移行') === -1);
+  assert.ok(labels.indexOf('移転元') === -1);
+  assert.ok(labels.indexOf('内SIMのみ') === -1);
+});
+
+test('buildAggBlockRows: 全ゼロのときも例外にならず基本行のみ出る', function () {
+  var model = Logic.buildDayModel({ date: '2026-08-10' });
+  var rows = Logic.buildAggBlockRows(model);
+  assert.ok(rows.length > 0);
+  var subHeader = rows.filter(function (r) { return r.label === '副商材'; })[0];
+  assert.strictEqual(subHeader.total, 0);
+});
+
+// ============================================================
+// sheets.js（SpreadsheetAppモック）の軽量統合テスト
+// ============================================================
+var sheetsTestResult = require('./sheets_test.js').run();
+passed += sheetsTestResult.passed;
+failed += sheetsTestResult.failed;
+failures = failures.concat(sheetsTestResult.failures);
+
 // ============================================================
 // 結果表示
 // ============================================================
 console.log('');
-console.log('=== logic.js local test results ===');
+console.log('=== local test results (logic.js + sheets.js mock) ===');
 console.log('passed: ' + passed + ' / failed: ' + failed);
 if (failed > 0) {
   failures.forEach(function (f) {

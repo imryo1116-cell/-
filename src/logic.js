@@ -766,6 +766,85 @@ var Logic = (function () {
   }
 
   // ============================================================
+  // 週次・月次集計シート用の表示行データ（0件の項目は行ごと省略する）
+  // 表示用の並びだけを組み立てる純関数。実際のセル書き込みは sheets.js が行う。
+  // ============================================================
+  function buildAggBlockRows(agg) {
+    var c = agg.computed;
+    var rows = [];
+
+    function shareRow(label, share) {
+      var shareText = share.total > 0
+        ? GROUPS.map(function (g) { return GROUP_LABEL[g] + ' ' + fmtPct(share.byGroup[g].pct); }).join('／')
+        : '';
+      rows.push({
+        label: label,
+        dcm: share.byGroup.DCM.count, sbym: share.byGroup.SBYM.count, auuq: share.byGroup.AUUQ.count,
+        total: share.total, share: shareText, note: ''
+      });
+    }
+
+    shareRow('MB総販', c.mbShare);
+    if (c.mb.total > 0) {
+      GROUPS.forEach(function (g) {
+        var kihen = 0, jun = 0;
+        CARRIERS.forEach(function (cc) {
+          if (CARRIER_GROUP[cc] === g) { kihen += agg.carriers[cc].kihen; jun += agg.carriers[cc].junshinki; }
+        });
+        var mnp = c.mnp.rikuKomiByGroup[g];
+        var mb = c.mb.byGroup[g];
+        if (mb > 0) {
+          rows.push({ label: '　内訳:' + GROUP_LABEL[g], dcm: '', sbym: '', auuq: '', total: mb, share: '', note: '機変' + kihen + '／純新規' + jun + '／MNP' + mnp });
+        }
+      });
+    }
+
+    shareRow('MNPリク込み', c.rikuKomiShare);
+    shareRow('MNPリク除き', c.rikuNukiShare);
+
+    if (c.mnp.uchiSimTotal > 0) {
+      rows.push({ label: '内SIMのみ', dcm: c.mnp.uchiSimByGroup.DCM, sbym: c.mnp.uchiSimByGroup.SBYM, auuq: c.mnp.uchiSimByGroup.AUUQ, total: c.mnp.uchiSimTotal, share: '', note: '' });
+    }
+    if (c.mnp.migTotal > 0) {
+      var migParts = MIGRATIONS.filter(function (m) { return agg.migrations[m.key] > 0; }).map(function (m) { return m.text + ' ' + agg.migrations[m.key] + '件'; });
+      rows.push({ label: '番号移行', dcm: '', sbym: '', auuq: '', total: c.mnp.migTotal, share: '', note: migParts.join('／') });
+    }
+    if (c.mnp.sourceTotal > 0) {
+      var srcParts = SOURCES.filter(function (s) { return agg.sources[s.key] > 0; }).map(function (s) { return s.text + ' ' + agg.sources[s.key] + '件'; });
+      rows.push({ label: '移転元', dcm: '', sbym: '', auuq: '', total: c.mnp.sourceTotal, share: '', note: srcParts.join('／') });
+    }
+
+    rows.push({ label: '副商材', dcm: c.sub.byGroup.DCM, sbym: c.sub.byGroup.SBYM, auuq: c.sub.byGroup.AUUQ, total: c.sub.grandTotal, share: '', note: '', header: true });
+    if (c.sub.grandTotal > 0) {
+      GROUPS.forEach(function (g) {
+        if (c.sub.byGroup[g] === 0) return;
+        var categories = [];
+        SUB_DEF.forEach(function (d) { if (d.group === g && categories.indexOf(d.category) === -1) categories.push(d.category); });
+        categories.forEach(function (cat) {
+          var defsInCat = SUB_DEF.filter(function (d) { return d.group === g && d.category === cat; });
+          var hasAny = defsInCat.some(function (d) { return c.sub.values[d.key] > 0; });
+          if (!hasAny) return;
+          var parts = defsInCat.filter(function (d) { return c.sub.values[d.key] > 0; }).map(function (d) { return d.name + ' ' + c.sub.values[d.key] + '件'; });
+          rows.push({ label: '　' + GROUP_LABEL[g] + cat, dcm: '', sbym: '', auuq: '', total: '', share: '', note: parts.join('／') });
+        });
+      });
+    }
+
+    rows.push({ label: '屋号商材', dcm: c.yagou.byGroup.DCM, sbym: c.yagou.byGroup.SBYM, auuq: c.yagou.byGroup.AUUQ, total: c.yagou.grandTotal, share: '', note: '', header: true });
+    if (c.yagou.grandTotal > 0) {
+      YAGOU_PRODUCTS.forEach(function (p) {
+        var pd = c.yagou.byProduct[p.key];
+        if (pd.total === 0) return;
+        rows.push({ label: '　' + p.label, dcm: pd.perGroup.DCM, sbym: pd.perGroup.SBYM, auuq: pd.perGroup.AUUQ, total: pd.total, share: '', note: '' });
+      });
+    }
+
+    if (agg.event) rows.push({ label: 'イベント', dcm: '', sbym: '', auuq: '', total: '', share: '', note: agg.event });
+
+    return rows;
+  }
+
+  // ============================================================
   // 公開インターフェース
   // ============================================================
   return {
@@ -818,6 +897,7 @@ var Logic = (function () {
 
     fmtPct: fmtPct,
     shareLine: shareLine,
+    buildAggBlockRows: buildAggBlockRows,
     buildTitle: buildTitle,
     shortDate: shortDate,
     generateReportText: generateReportText
